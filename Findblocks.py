@@ -2,18 +2,13 @@ import requests
 import datetime
 import time
 
-# --- AYARLAR ---
 
-# 1. GÜVENLİK UYARISI: Lütfen Etherscan'den YENİ bir API anahtarı alın ve buraya yapıştırın.
-#    Daha önce paylaştığınız anahtar artık güvenli değildir!
 API_KEY = "RITCEX7USMJGW2G95SFBJR5RFG8MVM3K6Z"
 
-# 2. Verisini çekmek istediğiniz tarihi ayarlayın
 TARGET_YEAR = 2024
 TARGET_MONTH = 10
 TARGET_DAY = 1  # 1 Ekim
 
-# --- Etherscan API V2 ---
 BASE_URL = "https://api.etherscan.io/v2/api"
 
 def get_block_number_by_time(timestamp, closest="after", api_key=API_KEY):
@@ -32,7 +27,7 @@ def get_block_number_by_time(timestamp, closest="after", api_key=API_KEY):
     
     try:
         response = requests.get(BASE_URL, params=params)
-        response.raise_for_status()  # HTTP hatası varsa fırlat
+        response.raise_for_status()  
         data = response.json()
         
         if data["status"] == "1":
@@ -45,12 +40,10 @@ def get_block_number_by_time(timestamp, closest="after", api_key=API_KEY):
         print(f"API isteği sırasında bir hata oluştu: {e}")
         return None
 
-# --- Ana İşlem ---
 if __name__ == "__main__":
     if API_KEY == "YENI_API_KEYINIZI_BURAYA_GIRIN":
         print("HATA: Lütfen `find_blocks.py` dosyasını açıp API_KEY değişkenini güncelleyin.")
     else:
-        # 1. Başlangıç ve bitiş zaman damgalarını hesapla
         start_dt = datetime.datetime(TARGET_YEAR, TARGET_MONTH, TARGET_DAY, 0, 0, 0)
         start_timestamp = int(start_dt.timestamp())
         
@@ -62,15 +55,11 @@ if __name__ == "__main__":
         print(f"Bitiş Zaman Damgası: {end_timestamp}")
         print("-" * 30)
 
-        # 2. API'ye istekleri gönder
-        
-        # Günün İLK BLOĞU: 00:00:00'dan 'sonra' (after) gelen ilk blok
+      
         start_block = get_block_number_by_time(start_timestamp, "after")
         
-        # Etherscan'in saniyede 5 istek limitine takılmamak için 1 saniye bekle
         time.sleep(1) 
         
-        # Günün SON BLOĞU: 23:59:59'dan 'önce' (before) gelen son blok
         end_block = get_block_number_by_time(end_timestamp, "before")
 
         print("-" * 30)

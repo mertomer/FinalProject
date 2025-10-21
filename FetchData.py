@@ -12,19 +12,15 @@ END_BLOCK = 20873189
 # Alchemy'in RPC adresi
 RPC_URL = "https://eth-mainnet.g.alchemy.com/v2/GxHHPQLvsUZ2amJtwrprf"
 
-# API istekleri için headers
 HEADERS = {
     "accept": "application/json",
     "content-type": "application/json"
 }
 
-# Oluşturulacak veritabanı dosyasının adı
 DB_FILE = "ethereum_data.db"
 
-# --- 2. VERİTABANI KURULUMU ---
 def setup_database():
-    """Veritabanını ve tabloları oluşturur."""
-    conn = sqlite3.connect(DB_FILE, timeout=20)  # 20 saniye timeout ekle
+    conn = sqlite3.connect(DB_FILE, timeout=20)  
     cursor = conn.cursor()
 
     # Blocks Tablosu
@@ -56,13 +52,11 @@ def setup_database():
     print(f"Veritabanı '{DB_FILE}' başarıyla kuruldu/yüklendi.")
     return conn
 
-# --- 3. SAĞLAM (ROBUST) API İSTEK FONKSİYONU ---
 def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
     """
     Bir blok verisini çeker. API hatası veya rate limit (429) alırsa,
     bekleyerek tekrar dener (exponential backoff).
     """
-    # Blok numarasını hex formatına çevir (0x ile başlayan)
     hex_block_number = hex(block_number)
     if not hex_block_number.startswith('0x'):
         hex_block_number = '0x' + hex_block_number[2:]
@@ -71,8 +65,8 @@ def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
         "jsonrpc": "2.0",
         "method": "eth_getBlockByNumber",
         "params": [
-            hex_block_number,  # 0x ile başlayan hex formatında blok numarası
-            True              # True parametresi tüm işlem detaylarını getirir
+            hex_block_number,  
+            True              
         ],
         "id": 1
     }
@@ -80,41 +74,37 @@ def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
     wait_time = initial_wait_sec
     for attempt in range(max_retries):
         try:
-            # timeout=15 saniye ekleyerek isteğin sonsuza kadar takılmasını engelle
             response = requests.post(RPC_URL, json=payload, headers=HEADERS, timeout=15)
             
-            # HTTP hata kodlarını (429 dahil) yakala
             response.raise_for_status() 
             
             data = response.json()
             
             if "result" in data and data["result"]:
-                return data["result"] # Başarılı -> veriyi döndür
+                return data["result"] 
             else:
                 error_msg = data.get('error', 'Bilinmeyen RPC hatası')
                 print(f"Blok {block_number}, Deneme {attempt + 1}: RPC Hatası: {error_msg}")
                 
         except requests.exceptions.HTTPError as http_err:
-            if http_err.response.status_code == 429: # Too Many Requests
+            if http_err.response.status_code == 429: 
                 print(f"Blok {block_number}: Rate Limit (429) alındı. {wait_time} saniye bekleniyor...")
             else:
                 print(f"Blok {block_number}: HTTP Hatası: {http_err}")
         
         except requests.exceptions.RequestException as e:
-            # Timeout, bağlantı hatası vb.
+
             print(f"Blok {block_number}: Bağlantı Hatası: {e}")
 
-        # Başarısız olduysa, bekleme süresini artırarak tekrar deneyecek
         if attempt < max_retries - 1:
             time.sleep(wait_time)
-            wait_time *= 2 # Bekleme süresini ikiye katla (2s, 4s, 8s, 16s...)
+            wait_time *= 2 
         
     print(f"HATA: Blok {block_number} {max_retries} deneme sonunda alınamadı.")
     return None
 
-# --- 4. VERİTABANINA YAZMA İŞLEMİ ---
 def process_block(conn, block_data):
-    """Gelen blok verisini veritabanına işler."""
+   
     cursor = conn.cursor()
     
     try:
@@ -132,10 +122,8 @@ def process_block(conn, block_data):
             len(block_data['transactions'])
         ))
         
-        # 2. İşlem (Transaction) Verilerini Kaydet
         transactions_to_insert = []
         for tx in block_data['transactions']:
-            # 'to' adresi null olabilir (kontrat oluşturma işlemi)
             to_address = tx.get('to') if tx.get('to') else "CONTRACT_CREATION"
             
             transactions_to_insert.append((
@@ -143,11 +131,10 @@ def process_block(conn, block_data):
                 int(tx['blockNumber'], 16),
                 tx['from'],
                 to_address,
-                tx['value'],    # Hex değeri string olarak sakla
-                tx['gasPrice']  # Hex değeri string olarak sakla
+                tx['value'],    
+                tx['gasPrice']  
             ))
         
-        # Toplu insert (çok daha hızlı)
         cursor.executemany('''
         INSERT OR IGNORE INTO Transactions (txHash, blockNumber, fromAddress, toAddress, value_wei, gasPrice)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -158,15 +145,14 @@ def process_block(conn, block_data):
         
     except Exception as e:
         print(f"!!! VERİTABANI HATASI (Blok {int(block_data['number'], 16)}): {e}")
-        conn.rollback() # Hata varsa bu bloktaki tüm işlemleri geri al
+        conn.rollback()
         return False
 
-# --- 5. ANA ÇALIŞTIRMA FONKSİYONU ---
 def main():
     if START_BLOCK == 0 or END_BLOCK == 0:
         print("HATA: Lütfen `fetch_data.py` dosyasını açın.")
         print("`START_BLOCK` ve `END_BLOCK` değişkenlerini `find_blocks.py` script'inden aldığınız değerlerle güncelleyin.")
-        sys.exit(1) # Hata koduyla çık
+        sys.exit(1) 
 
     conn = setup_database()
     
@@ -179,10 +165,8 @@ def main():
     start_time = time.time()
 
     for i, block_num in enumerate(range(START_BLOCK, END_BLOCK + 1)):
-        # Saniyede maksimum 30 işlem için bekleme
-        time.sleep(1/30)  # Her işlem arasında yaklaşık 0.033 saniye bekle
-        
-        progress = f"[{i+1}/{total_blocks}]" # İlerleme durumu
+        time.sleep(1/30)  
+        progress = f"[{i+1}/{total_blocks}]" 
         
         print(f"{progress} Blok {block_num} çekiliyor...")
         
@@ -195,7 +179,6 @@ def main():
                 print(f"{progress} Blok {block_num} veritabanına işlendi. ({tx_count} işlem)")
         else:
             print(f"{progress} Blok {block_num} çekilemedi, atlanıyor.")
-            # İsteğe bağlı: Başarısız blokları bir log dosyasına yazabilirsiniz.
 
     conn.close()
     
@@ -206,6 +189,5 @@ def main():
     print(f"Toplam {total_blocks} blok {total_time:.2f} saniyede işlendi.")
     print(f"Tüm verileriniz '{DB_FILE}' dosyasında.")
 
-# Script'i çalıştır
 if __name__ == "__main__":
     main()
