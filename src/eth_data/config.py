@@ -8,10 +8,10 @@ from typing import Any, Dict, Optional
 
 import os
 
-try:  # Python 3.11+
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover - fallback for older runtimes
-    import tomli as tomllib  # type: ignore[no-redef]
+try:  
+    import tomllib  
+except ModuleNotFoundError:  
+    import tomli as tomllib  
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -137,7 +137,7 @@ def load_etherscan_settings(config_path: Optional[Path] = None) -> EtherscanSett
     if target_date_str:
         try:
             target_date_value = datetime.strptime(target_date_str, "%Y-%m-%d").date()
-        except ValueError as exc:  # pragma: no cover - invalid input guarded by CLI
+        except ValueError as exc:  
             raise ValueError(
                 "ETHERSCAN_TARGET_DATE must be in YYYY-MM-DD format"
             ) from exc
@@ -148,7 +148,7 @@ def load_etherscan_settings(config_path: Optional[Path] = None) -> EtherscanSett
                 target_date_value = datetime.strptime(
                     str(config_target_date), "%Y-%m-%d"
                 ).date()
-            except ValueError as exc:  # pragma: no cover - invalid input guarded by CLI
+            except ValueError as exc:
                 raise ValueError(
                     "etherscan.target_date must be in YYYY-MM-DD format"
                 ) from exc
