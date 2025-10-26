@@ -1,0 +1,4 @@
+# Ignore database and other generated artifacts
+*.db
+*.sqlite
+*.sqlite3

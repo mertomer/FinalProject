@@ -1,0 +1,14 @@
+[fetch]
+start_block = 0
+end_block = 0
+rpc_url = "https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY"
+db_file = "data/ethereum_data.db"
+
+[fetch.headers]
+accept = "application/json"
+content-type = "application/json"
+
+[etherscan]
+api_key = "YOUR_ETHERSCAN_API_KEY"
+target_date = "2024-10-01"
+base_url = "https://api.etherscan.io/v2/api"
