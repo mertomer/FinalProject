@@ -401,7 +401,7 @@ def main_simulation():
                 # DataFrame'e satır olarak ekle
                 df_results.loc[len(df_results)] = res
         
-        # --- Task 4.2: Tüm Sonuçları Raporla ---
+        # --- Task 4.2: Sonuçları Analiz Etme ve Raporlama ---
         print("\n" + "=" * 60)
         print("TÜM SİMÜLASYONLARIN ÖZET RAPORU (Task 4.2)")
         print("=" * 60)
@@ -413,6 +413,20 @@ def main_simulation():
         # Raporlama için sayısal tipleri onayla
         df_results['toplam_odul'] = pd.to_numeric(df_results['toplam_odul'])
         df_results['n_blocks'] = pd.to_numeric(df_results['n_blocks'])
+        df_results['kullanilan_kapasite'] = pd.to_numeric(df_results['kullanilan_kapasite'])
+        df_results['toplam_kapasite'] = pd.to_numeric(df_results['toplam_kapasite'])
+        df_results['secilen_islem_sayisi'] = pd.to_numeric(df_results['secilen_islem_sayisi'])
+        df_results['havuzdaki_islem_sayisi'] = pd.to_numeric(df_results['havuzdaki_islem_sayisi'])
+        
+        # Hocanızın istediği metrikleri ekle
+        df_results['islem_odulleri'] = df_results['toplam_odul']  # Zaten var: 'odul'
+        df_results['kullanilan_kapasite_yuzdesi'] = (df_results['kullanilan_kapasite'] / df_results['toplam_kapasite']) * 100
+        df_results['bekleyen_islem_sayisi'] = df_results['havuzdaki_islem_sayisi'] - df_results['secilen_islem_sayisi']
+        
+        # Son tabloyu konsola yazdır
+        print("\n--- HOCANIZIN İSTEDİĞİ KARŞILAŞTIRMA TABLOSU ---")
+        print(df_results[['n_blocks', 'algoritma', 'islem_odulleri', 'kullanilan_kapasite_yuzdesi', 
+                         'secilen_islem_sayisi', 'bekleyen_islem_sayisi']].to_string(index=False, float_format="%.2f"))
 
         # --- Hocanızın İstediği Kıyaslamalar ---
 
