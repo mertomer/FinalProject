@@ -19,8 +19,9 @@ HEADERS = {
 
 DB_FILE = "ethereum_data.db"
 
+# --- 2. VERİTABANI KURULUMU (GÜNCELLENDİ) ---
 def setup_database():
-    conn = sqlite3.connect(DB_FILE, timeout=20)  
+    conn = sqlite3.connect(DB_FILE, timeout=20) 
     cursor = conn.cursor()
 
     # Blocks Tablosu
@@ -36,15 +37,16 @@ def setup_database():
     )
     ''')
 
-    # Transactions Tablosu
+    # Transactions Tablosu (GÜNCELLENDİ)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Transactions (
         txHash TEXT PRIMARY KEY,
         blockNumber INTEGER,
         fromAddress TEXT,
         toAddress TEXT,
-        value_wei TEXT,  -- Hassasiyet kaybı olmasın diye TEXT (string)
-        gasPrice TEXT    -- Hassasiyet kaybı olmasın diye TEXT (string)
+        value_wei TEXT,
+        gasPrice TEXT,
+        gas TEXT 
     )
     ''')
     
@@ -52,6 +54,7 @@ def setup_database():
     print(f"Veritabanı '{DB_FILE}' başarıyla kuruldu/yüklendi.")
     return conn
 
+# --- 3. SAĞLAM API İSTEK FONKSİYONU (Değişiklik Yok) ---
 def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
     """
     Bir blok verisini çeker. API hatası veya rate limit (429) alırsa,
@@ -66,7 +69,7 @@ def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
         "method": "eth_getBlockByNumber",
         "params": [
             hex_block_number,  
-            True              
+            True               
         ],
         "id": 1
     }
@@ -75,7 +78,6 @@ def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
     for attempt in range(max_retries):
         try:
             response = requests.post(RPC_URL, json=payload, headers=HEADERS, timeout=15)
-            
             response.raise_for_status() 
             
             data = response.json()
@@ -93,18 +95,18 @@ def get_block_data_robust(block_number, max_retries=5, initial_wait_sec=2):
                 print(f"Blok {block_number}: HTTP Hatası: {http_err}")
         
         except requests.exceptions.RequestException as e:
-
             print(f"Blok {block_number}: Bağlantı Hatası: {e}")
 
         if attempt < max_retries - 1:
             time.sleep(wait_time)
             wait_time *= 2 
-        
+    
     print(f"HATA: Blok {block_number} {max_retries} deneme sonunda alınamadı.")
     return None
 
+# --- 4. VERİTABANINA YAZMA İŞLEMİ (GÜNCELLENDİ) ---
 def process_block(conn, block_data):
-   
+    
     cursor = conn.cursor()
     
     try:
@@ -122,6 +124,7 @@ def process_block(conn, block_data):
             len(block_data['transactions'])
         ))
         
+        # 2. İşlem (Transaction) Verilerini Kaydet (GÜNCELLENDİ)
         transactions_to_insert = []
         for tx in block_data['transactions']:
             to_address = tx.get('to') if tx.get('to') else "CONTRACT_CREATION"
@@ -132,15 +135,17 @@ def process_block(conn, block_data):
                 tx['from'],
                 to_address,
                 tx['value'],    
-                tx['gasPrice']  
+                tx['gasPrice'],
+                tx['gas']  # <-- YENİ EKLENEN VERİ
             ))
         
+        # Toplu insert (GÜNCELLENDİ)
         cursor.executemany('''
-        INSERT OR IGNORE INTO Transactions (txHash, blockNumber, fromAddress, toAddress, value_wei, gasPrice)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO Transactions (txHash, blockNumber, fromAddress, toAddress, value_wei, gasPrice, gas)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', transactions_to_insert)
 
-        conn.commit() # İşlemleri onayla
+        conn.commit() 
         return True
         
     except Exception as e:
@@ -148,6 +153,7 @@ def process_block(conn, block_data):
         conn.rollback()
         return False
 
+# --- 5. ANA ÇALIŞTIRMA FONKSİYONU (Değişiklik Yok) ---
 def main():
     if START_BLOCK == 0 or END_BLOCK == 0:
         print("HATA: Lütfen `fetch_data.py` dosyasını açın.")
