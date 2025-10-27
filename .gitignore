@@ -1,2 +1,16 @@
-ethereum_data.db
-ethereum_data.db-journal
+# Veritabanı ve Çıktılar
+data/
+results/
+
+# Python Cache ve Sanal Ortam
+__pycache__/
+*.pyc
+venv/
+*.env
+
+# Gizli Yapılandırma Dosyaları
+eth_analyzer/config.py
+
+# IDE/Editör Dosyaları (opsiyonel ama önerilir)
+.vscode/
+.idea/
