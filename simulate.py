@@ -20,7 +20,8 @@ try:
     from eth_analyzer.simulation.core import get_simulation_pool
     from eth_analyzer.simulation.algorithms import (
         solve_random, solve_greedy,
-        solve_genetic_algorithm, solve_simulated_annealing
+        solve_genetic_algorithm, solve_simulated_annealing,
+        solve_rl_policy
     )
 except ImportError as e:
     print(f"HATA: Gerekli modüller import edilemedi: {e}")
@@ -59,8 +60,9 @@ def main_simulation():
             results_for_n = [
                 solve_random(pool_df, total_capacity, n_blocks),
                 solve_greedy(pool_df, total_capacity, n_blocks),
-                solve_genetic_algorithm(pool_df, total_capacity, n_blocks), 
-                solve_simulated_annealing(pool_df, total_capacity, n_blocks) 
+                solve_genetic_algorithm(pool_df, total_capacity, n_blocks),
+                solve_simulated_annealing(pool_df, total_capacity, n_blocks),
+                solve_rl_policy(pool_df, total_capacity, n_blocks, start_block=START_BLOCK)
             ]
 
             print(f"\n--- N={n_blocks} İçin Sonuçlar Kaydediliyor ---")

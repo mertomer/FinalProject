@@ -1,3 +1,7 @@
 requests
 pandas
 deap
+numpy
+gymnasium
+stable-baselines3
+torch

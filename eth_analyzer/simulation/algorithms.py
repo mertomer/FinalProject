@@ -1,7 +1,10 @@
+import os
 import random
 import math
 import time
-import pandas as pd 
+import pandas as pd
+
+import numpy as np
 
 DEAP_AVAILABLE = True
 try:
@@ -9,10 +12,21 @@ try:
 except ImportError:
     DEAP_AVAILABLE = False
     print("UYARI: 'deap' kütüphanesi bulunamadı. GA için yerel (DEAP'siz) çözüm çalışacak.")
+
+STABLE_BASELINES_AVAILABLE = True
+try:
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+except ImportError:
+    STABLE_BASELINES_AVAILABLE = False
+    print("UYARI: 'stable-baselines3' kütüphanesi bulunamadı. RL modeli kullanılamayacak.")
+
 try:
     from ..config import (
         GA_POPULATION_SIZE, GA_GENERATIONS, GA_CROSSOVER_PROB, GA_MUTATION_PROB,
-        SA_INITIAL_TEMP, SA_MIN_TEMP, SA_ALPHA
+        SA_INITIAL_TEMP, SA_MIN_TEMP, SA_ALPHA,
+        RL_MODEL_PATH, RL_VECNORMALIZE_PATH,
+        DEFAULT_START_BLOCK
     )
 except ImportError:
     print("Uyarı: config.py bulunamadı veya GA/SA parametreleri eksik. Varsayılan değerler kullanılacak.")
@@ -23,6 +37,18 @@ except ImportError:
     SA_INITIAL_TEMP = 100.0
     SA_MIN_TEMP = 1e-3
     SA_ALPHA = 0.99
+    RL_MODEL_PATH = None
+    RL_VECNORMALIZE_PATH = None
+    DEFAULT_START_BLOCK = 20866020
+
+try:
+    from ..rl.environment import MempoolEnv
+except ImportError:
+    MempoolEnv = None
+    print("UYARI: RL ortamı import edilemedi. RL modeli kullanılamayacak.")
+
+_RL_MODEL = None
+_RL_MODEL_LOAD_ERROR = None
 
 # --- YARDIMCI FONKSİYON (GÜNCELLENDİ) ---
 def calculate_derived_metrics(total_value, total_weight, selected_tx_count, capacity, n_blocks):
@@ -41,11 +67,52 @@ def calculate_derived_metrics(total_value, total_weight, selected_tx_count, capa
     return avg_reward_per_tx, avg_weight_per_tx, cap_util_percent, tps
 
 
+def _empty_result(algorithm_name):
+    return {
+        "algoritma": algorithm_name,
+        "toplam_odul": 0,
+        "kullanilan_kapasite": 0,
+        "secilen_islem_sayisi": 0,
+        "kapasite_doluluk_yuzdesi": 0.0,
+        "ortalama_odul_per_tx": 0.0,
+        "ortalama_agirlik_per_tx": 0.0,
+        "tps": 0.0
+    }
+
+
+def _load_rl_model():
+    global _RL_MODEL, _RL_MODEL_LOAD_ERROR
+
+    if _RL_MODEL is not None:
+        return _RL_MODEL
+
+    if _RL_MODEL_LOAD_ERROR is not None:
+        return None
+
+    if not STABLE_BASELINES_AVAILABLE:
+        _RL_MODEL_LOAD_ERROR = "stable-baselines3 eksik"
+        return None
+
+    if RL_MODEL_PATH is None or not os.path.exists(RL_MODEL_PATH):
+        _RL_MODEL_LOAD_ERROR = f"Model dosyası bulunamadı: {RL_MODEL_PATH}"
+        print(f"[RL] Model yolu bulunamadı: {RL_MODEL_PATH}")
+        return None
+
+    try:
+        _RL_MODEL = PPO.load(RL_MODEL_PATH)
+    except Exception as exc:
+        _RL_MODEL_LOAD_ERROR = str(exc)
+        print(f"[RL] Model yüklenemedi: {exc}")
+        return None
+
+    return _RL_MODEL
+
+
 def solve_random(transactions_df, capacity, n_blocks):
     """Algoritma 1: Rastgele Seçim (Baseline)"""
     # Boş havuz veya sıfır kapasite kontrolü
     if transactions_df.empty or capacity <= 0:
-        return {"algoritma": "Rastgele", "toplam_odul": 0, "kullanilan_kapasite": 0, "secilen_islem_sayisi": 0, "kapasite_doluluk_yuzdesi": 0.0, "ortalama_odul_per_tx": 0.0, "ortalama_agirlik_per_tx": 0.0, "tps": 0.0}
+        return _empty_result("Rastgele")
         
     shuffled_df = transactions_df.sample(frac=1)
     total_value, total_weight, selected_tx_count = 0, 0, 0
@@ -69,7 +136,7 @@ def solve_random(transactions_df, capacity, n_blocks):
 def solve_greedy(transactions_df, capacity, n_blocks):
     """Algoritma 2: Açgözlü (Greedy) Seçim"""
     if transactions_df.empty or capacity <= 0:
-        return {"algoritma": "Açgözlü (Greedy)", "toplam_odul": 0, "kullanilan_kapasite": 0, "secilen_islem_sayisi": 0, "kapasite_doluluk_yuzdesi": 0.0, "ortalama_odul_per_tx": 0.0, "ortalama_agirlik_per_tx": 0.0, "tps": 0.0}
+        return _empty_result("Açgözlü (Greedy)")
         
     df = transactions_df.copy()
    
@@ -95,7 +162,7 @@ def solve_greedy(transactions_df, capacity, n_blocks):
 def solve_genetic_algorithm(transactions_df, capacity, n_blocks):
     """Algoritma 3: Genetik Algoritma (Yapay Zeka)"""
     if transactions_df.empty or capacity <= 0:
-        return {"algoritma": "Genetik Algoritma (YZ)", "toplam_odul": 0, "kullanilan_kapasite": 0, "secilen_islem_sayisi": 0, "kapasite_doluluk_yuzdesi": 0.0, "ortalama_odul_per_tx": 0.0, "ortalama_agirlik_per_tx": 0.0, "tps": 0.0}
+        return _empty_result("Genetik Algoritma (YZ)")
         
     if not DEAP_AVAILABLE:
         print("\n[GA] Yerel Genetik Algoritma (DEAP yok) çalıştırılıyor...")
@@ -224,7 +291,7 @@ def solve_genetic_algorithm(transactions_df, capacity, n_blocks):
 def solve_simulated_annealing(transactions_df, capacity, n_blocks):
     """Algoritma 4: Benzetilmiş Tavlama (Simulated Annealing - SA)"""
     if transactions_df.empty or capacity <= 0:
-        return {"algoritma": "Benzetilmiş Tavlama (YZ)", "toplam_odul": 0, "kullanilan_kapasite": 0, "secilen_islem_sayisi": 0, "kapasite_doluluk_yuzdesi": 0.0, "ortalama_odul_per_tx": 0.0, "ortalama_agirlik_per_tx": 0.0, "tps": 0.0}
+        return _empty_result("Benzetilmiş Tavlama (YZ)")
         
     print("\n[SA] Benzetilmiş Tavlama (YZ) çalıştırılıyor...")
     items = transactions_df[['weight', 'value']].to_dict('records')
@@ -288,5 +355,111 @@ def solve_simulated_annealing(transactions_df, capacity, n_blocks):
         "algoritma": "Benzetilmiş Tavlama (YZ)", "toplam_odul": best_value, "kullanilan_kapasite": best_weight,
         "secilen_islem_sayisi": selected_tx_count, "kapasite_doluluk_yuzdesi": cap_util,
         "ortalama_odul_per_tx": avg_reward, "ortalama_agirlik_per_tx": avg_weight,
-        "tps": tps 
+        "tps": tps
+    }
+
+
+def solve_rl_policy(transactions_df, capacity, n_blocks, start_block=None):
+    """Algoritma 5: Öğrenilmiş PPO tabanlı RL politikası."""
+
+    algorithm_name = "PPO (RL)"
+
+    if transactions_df.empty or capacity <= 0:
+        return _empty_result(algorithm_name)
+
+    if not STABLE_BASELINES_AVAILABLE or MempoolEnv is None:
+        print("[RL] Gerekli RL bağımlılıkları eksik. RL algoritması atlanıyor.")
+        return _empty_result(algorithm_name)
+
+    model = _load_rl_model()
+    if model is None:
+        return _empty_result(algorithm_name)
+
+    # Havuzu hazırlayalım (RL ortamı yoğunluk sütununa ihtiyaç duyuyor)
+    prepared_df = transactions_df.copy().reset_index(drop=True)
+    if 'density' not in prepared_df.columns:
+        prepared_df['density'] = prepared_df['value'] / (prepared_df['weight'] + 1e-9)
+
+    env_kwargs = dict(
+        start_block=start_block if start_block is not None else DEFAULT_START_BLOCK,
+        n_blocks=n_blocks,
+        pool_df=prepared_df,
+        total_capacity=capacity
+    )
+
+    try:
+        base_env = MempoolEnv(**env_kwargs)
+    except Exception as exc:
+        print(f"[RL] Ortam oluşturulamadı: {exc}")
+        return _empty_result(algorithm_name)
+
+    vec_env = DummyVecEnv([lambda: base_env])
+
+    if RL_VECNORMALIZE_PATH and os.path.exists(RL_VECNORMALIZE_PATH):
+        try:
+            vec_env = VecNormalize.load(RL_VECNORMALIZE_PATH, vec_env)
+            vec_env.training = False
+            vec_env.norm_reward = False
+        except Exception as exc:
+            print(f"[RL] VecNormalize yüklenemedi ({exc}). Normalize edilmemiş ortam kullanılacak.")
+            vec_env = DummyVecEnv([lambda: base_env])
+
+    try:
+        model.set_env(vec_env)
+        reset_result = vec_env.reset()
+        if isinstance(reset_result, tuple) and len(reset_result) == 2:
+            obs, _ = reset_result
+        else:
+            obs = reset_result
+
+        done = np.array([False])
+        safety_counter = 0
+        max_steps = len(prepared_df) + 5
+
+        while not bool(done[0]):
+            action, _ = model.predict(obs, deterministic=True)
+            step_result = vec_env.step(action)
+
+            if len(step_result) == 4:
+                obs, _rewards, dones, _infos = step_result
+                done = np.array(dones, dtype=bool)
+            elif len(step_result) == 5:
+                obs, _rewards, terminated, truncated, _infos = step_result
+                done = np.array(terminated, dtype=bool) | np.array(truncated, dtype=bool)
+            else:
+                raise ValueError("VecEnv.step beklenmeyen çıktı döndürdü")
+
+            safety_counter += 1
+            if safety_counter > max_steps:
+                print("[RL] Güvenlik sınırı aşıldı, döngü sonlandırıldı.")
+                break
+
+    except Exception as exc:
+        print(f"[RL] Politika yürütülürken hata oluştu: {exc}")
+        return _empty_result(algorithm_name)
+
+    # Temel ortam örneğini alın (VecNormalize kullanılıyorsa iç ortamı çek)
+    underlying_env = vec_env
+    if isinstance(vec_env, VecNormalize):
+        underlying_env = vec_env.venv
+
+    env_instance = underlying_env.envs[0]
+
+    selected_tx_count = len(env_instance.selected_tx_indices)
+    total_value = env_instance.current_total_reward
+    total_weight = env_instance.total_capacity - env_instance.remaining_capacity
+
+    avg_reward, avg_weight, cap_util, tps = calculate_derived_metrics(
+        total_value, total_weight, selected_tx_count, capacity, n_blocks
+    )
+
+    return {
+        "algoritma": algorithm_name,
+        "toplam_odul": total_value,
+        "kullanilan_kapasite": total_weight,
+        "secilen_islem_sayisi": selected_tx_count,
+        "kapasite_doluluk_yuzdesi": cap_util,
+        "ortalama_odul_per_tx": avg_reward,
+        "ortalama_agirlik_per_tx": avg_weight,
+        "tps": tps
     }

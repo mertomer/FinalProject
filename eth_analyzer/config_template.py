@@ -40,3 +40,7 @@ SA_ALPHA = 0.99
 # --- Sonuç Dosyaları Yolu ---
 RESULTS_DIR = os.path.join(_PROJECT_ROOT, "results")
 REPORT_CSV_FILE = os.path.join(RESULTS_DIR, "simulasyon_sonuclari_detayli.csv")
+
+# --- RL Modeli Dosya Yolları ---
+RL_MODEL_PATH = os.path.join(RESULTS_DIR, "rl_mempool_ppo_50000steps.zip")
+RL_VECNORMALIZE_PATH = os.path.join(RESULTS_DIR, "rl_mempool_ppo_50000steps_vecnormalize.pkl")

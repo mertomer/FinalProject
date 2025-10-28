@@ -16,7 +16,8 @@ class MempoolEnv(gym.Env):
     """
     metadata = {'render_modes': []} # Render desteklemiyoruz
 
-    def __init__(self, start_block=DEFAULT_START_BLOCK, n_blocks=10, k_top_actions=20):
+    def __init__(self, start_block=DEFAULT_START_BLOCK, n_blocks=10, k_top_actions=20,
+                 pool_df=None, total_capacity=None):
         super().__init__()
 
         self.start_block = start_block
@@ -25,20 +26,25 @@ class MempoolEnv(gym.Env):
 
         # 1. Havuzu ve Kapasiteyi Yükle (Ortamın temel verisi)
         # Not: Gerçek eğitimde burası daha dinamik olabilir, şimdilik sabit
-        print(f"RL Ortamı başlatılıyor: {n_blocks} blokluk havuz yükleniyor...")
-        try:
-            self.full_pool_df, self.total_capacity = get_simulation_pool(self.start_block, self.n_blocks)
-            if self.full_pool_df.empty or self.total_capacity <= 0:
-                raise ValueError("Havuz boş veya kapasite sıfır. Ortam başlatılamadı.")
-            # Hesaplama kolaylığı için yoğunluğu ekle
-            self.full_pool_df['density'] = self.full_pool_df['value'] / (self.full_pool_df['weight'] + 1e-9)
-            print(f"Havuz yüklendi: {len(self.full_pool_df)} işlem, Kapasite: {self.total_capacity:,}")
-        except FileNotFoundError:
-             print("HATA: Veritabanı bulunamadı. Lütfen önce FetchData çalıştırın.")
-             raise
-        except ValueError as e:
-            print(f"HATA: {e}")
-            raise
+        self.full_pool_df = None
+        self.total_capacity = None
+
+        if pool_df is not None:
+            if total_capacity is None:
+                raise ValueError("pool_df ile birlikte total_capacity de sağlanmalıdır.")
+            self._initialize_from_pool(pool_df, total_capacity)
+        else:
+            print(f"RL Ortamı başlatılıyor: {n_blocks} blokluk havuz yükleniyor...")
+            try:
+                fetched_pool_df, fetched_capacity = get_simulation_pool(self.start_block, self.n_blocks)
+                self._initialize_from_pool(fetched_pool_df, fetched_capacity)
+                print(f"Havuz yüklendi: {len(self.full_pool_df)} işlem, Kapasite: {self.total_capacity:,}")
+            except FileNotFoundError:
+                print("HATA: Veritabanı bulunamadı. Lütfen önce FetchData çalıştırın.")
+                raise
+            except ValueError as e:
+                print(f"HATA: {e}")
+                raise
 
         # 2. Aksiyon Alanı (Action Space)
         # Ajan, o anki mevcut işlemler arasından en yoğun K tanesinden birini seçebilir.
@@ -56,6 +62,19 @@ class MempoolEnv(gym.Env):
 
         # Başlangıç durumu için `reset` çağrısı (best practice)
         self.reset()
+
+    def _initialize_from_pool(self, pool_df, total_capacity):
+        """Havuz verisini hazırlar ve yoğunluk sütununu ekler."""
+        if pool_df is None or pool_df.empty or total_capacity is None or total_capacity <= 0:
+            raise ValueError("Havuz boş veya kapasite sıfır. Ortam başlatılamadı.")
+
+        prepared_df = pool_df.copy()
+        prepared_df = prepared_df.reset_index(drop=True)
+        if 'density' not in prepared_df.columns:
+            prepared_df['density'] = prepared_df['value'] / (prepared_df['weight'] + 1e-9)
+
+        self.full_pool_df = prepared_df
+        self.total_capacity = total_capacity
 
     def _get_observation(self):
         """Mevcut durumdan gözlem vektörünü oluşturur."""
