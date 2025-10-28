@@ -10,14 +10,16 @@ import sys
 # Proje kök dizinini bul (visualize_results.py'nin bir üst dizini)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_DIR = os.path.join(_PROJECT_ROOT, "results")
-CSV_FILE = os.path.join(RESULTS_DIR, "simulasyon_sonuclari_detayli.csv")
+CSV_FILE = os.path.join(RESULTS_DIR, "simulasyon_sonuclari_detayli_tps.csv")
 
 # Renk paleti
 COLORS = {
     'Açgözlü (Greedy)': '#2E8B57',      # Deniz yeşili
     'Genetik Algoritma (YZ)': '#4169E1', # Kraliyet mavisi
     'Rastgele': '#DC143C',               # Kırmızı
-    'Benzetilmiş Tavlama (YZ)': '#FF8C00' # Turuncu
+    'Benzetilmiş Tavlama (YZ)': '#FF8C00', # Turuncu
+    'RL (PPO Model)': '#008080',         # Turkuaz
+    'RL PPO (Custom)': '#008080',        # Alternatif isim
 }
 
 # --- Veri Yükleme ---
