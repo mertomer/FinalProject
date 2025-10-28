@@ -29,17 +29,26 @@ try:
         DEFAULT_START_BLOCK
     )
 except ImportError:
-    print("Uyarı: config.py bulunamadı veya GA/SA parametreleri eksik. Varsayılan değerler kullanılacak.")
-    GA_POPULATION_SIZE = 100
-    GA_GENERATIONS = 50
-    GA_CROSSOVER_PROB = 0.7
-    GA_MUTATION_PROB = 0.1
-    SA_INITIAL_TEMP = 100.0
-    SA_MIN_TEMP = 1e-3
-    SA_ALPHA = 0.99
-    RL_MODEL_PATH = None
-    RL_VECNORMALIZE_PATH = None
-    DEFAULT_START_BLOCK = 20866020
+    try:
+        from ..config_template import (
+            GA_POPULATION_SIZE, GA_GENERATIONS, GA_CROSSOVER_PROB, GA_MUTATION_PROB,
+            SA_INITIAL_TEMP, SA_MIN_TEMP, SA_ALPHA,
+            RL_MODEL_PATH, RL_VECNORMALIZE_PATH,
+            DEFAULT_START_BLOCK
+        )
+        print("Uyarı: config.py bulunamadı. config_template değerleri kullanılacak.")
+    except ImportError:
+        print("Uyarı: config ayarları yüklenemedi. Sert kodlanmış varsayılanlar kullanılacak.")
+        GA_POPULATION_SIZE = 100
+        GA_GENERATIONS = 50
+        GA_CROSSOVER_PROB = 0.7
+        GA_MUTATION_PROB = 0.1
+        SA_INITIAL_TEMP = 100.0
+        SA_MIN_TEMP = 1e-3
+        SA_ALPHA = 0.99
+        RL_MODEL_PATH = None
+        RL_VECNORMALIZE_PATH = None
+        DEFAULT_START_BLOCK = 20866020
 
 try:
     from ..rl.environment import MempoolEnv

@@ -6,7 +6,10 @@ import pandas as pd
 import random
 
 from ..simulation.core import get_simulation_pool # Havuz oluşturma fonksiyonumuzu import ediyoruz
-from ..config import DEFAULT_START_BLOCK        # Varsayılan başlangıç bloğu
+try:
+    from ..config import DEFAULT_START_BLOCK        # Varsayılan başlangıç bloğu
+except ImportError:
+    from ..config_template import DEFAULT_START_BLOCK
 
 class MempoolEnv(gym.Env):
     """
