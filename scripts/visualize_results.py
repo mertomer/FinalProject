@@ -10,7 +10,7 @@ import sys
 # Proje kök dizinini bul (visualize_results.py'nin bir üst dizini)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_DIR = os.path.join(_PROJECT_ROOT, "results")
-CSV_FILE = os.path.join(RESULTS_DIR, "simulasyon_sonuclari_detayli.csv")
+CSV_FILE = os.path.join(RESULTS_DIR, "simulasyon_sonuclari_detayli_tps.csv")
 
 # Renk paleti
 COLORS = {
