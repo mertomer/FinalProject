@@ -17,7 +17,8 @@ COLORS = {
     'Açgözlü (Greedy)': '#2E8B57',      # Deniz yeşili
     'Genetik Algoritma (YZ)': '#4169E1', # Kraliyet mavisi
     'Rastgele': '#DC143C',               # Kırmızı
-    'Benzetilmiş Tavlama (YZ)': '#FF8C00' # Turuncu
+    'Benzetilmiş Tavlama (YZ)': '#FF8C00', # Turuncu
+    'RL PPO (YZ)': '#8A2BE2'            # Mor (RL için)
 }
 
 # --- Veri Yükleme ---

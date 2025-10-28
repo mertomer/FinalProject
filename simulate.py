@@ -22,6 +22,7 @@ try:
         solve_random, solve_greedy,
         solve_genetic_algorithm, solve_simulated_annealing
     )
+    from eth_analyzer.simulation.rl_algorithm import solve_rl_ppo
 except ImportError as e:
     print(f"HATA: Gerekli modüller import edilemedi: {e}")
     print("Proje yapısını ve __init__.py dosyalarını kontrol edin.")
@@ -60,7 +61,8 @@ def main_simulation():
                 solve_random(pool_df, total_capacity, n_blocks),
                 solve_greedy(pool_df, total_capacity, n_blocks),
                 solve_genetic_algorithm(pool_df, total_capacity, n_blocks), 
-                solve_simulated_annealing(pool_df, total_capacity, n_blocks) 
+                solve_simulated_annealing(pool_df, total_capacity, n_blocks),
+                solve_rl_ppo(pool_df, total_capacity, n_blocks)  # RL algoritması eklendi
             ]
 
             print(f"\n--- N={n_blocks} İçin Sonuçlar Kaydediliyor ---")
