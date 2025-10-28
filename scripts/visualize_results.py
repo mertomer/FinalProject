@@ -33,7 +33,7 @@ def load_and_prepare_data(csv_path=CSV_FILE):
     # Veri tiplerini düzelt
     numeric_cols = ['n_blocks', 'toplam_odul', 'kapasite_doluluk_yuzdesi',
                     'secilen_islem_sayisi', 'geride_kalan_islem_sayisi',
-                    'ortalama_odul_per_tx', 'ortalama_agirlik_per_tx']
+                    'ortalama_odul_per_tx', 'ortalama_agirlik_per_tx', 'tps']
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
@@ -163,6 +163,26 @@ def create_block_size_scalability_analysis(df):
     plt.tight_layout()
     save_plot('blok_sayisi_olceklendirme.png')
 
+def create_tps_over_blocks(df):
+    plt.figure(figsize=(12, 7))
+    for algo in df['algoritma'].unique():
+        algo_data = df[df['algoritma'] == algo].sort_values('n_blocks')
+        plt.plot(algo_data['n_blocks'], algo_data['tps'], marker='o', linewidth=2, markersize=5, label=algo, color=COLORS.get(algo, '#000000'))
+    plt.xlabel('Blok Sayısı (N)'); plt.ylabel('TPS (işlem/sn)')
+    plt.title('n_blocks’e Göre TPS'); plt.legend()
+    plt.grid(True, alpha=0.4); plt.tight_layout()
+    save_plot('tps_nblocks.png')
+
+def create_avg_tps_bar(df):
+    plt.figure(figsize=(10, 7))
+    avg_tps = df.groupby('algoritma')['tps'].mean().sort_values(ascending=False)
+    colors = [COLORS.get(algo, '#000000') for algo in avg_tps.index]
+    plt.bar(avg_tps.index, avg_tps.values, color=colors)
+    plt.ylabel('Ortalama TPS (işlem/sn)'); plt.title('Algoritmalara Göre Ortalama TPS')
+    plt.grid(True, alpha=0.4, axis='y'); plt.xticks(rotation=15)
+    plt.tight_layout()
+    save_plot('tps_ortalama_algoritmalar.png')
+
 # Kapsamlı Dashboard (İsteğe bağlı, 8 grafik olabilir)
 def create_comprehensive_dashboard(df):
     print("\n[Dashboard] Kapsamlı dashboard oluşturuluyor...")
@@ -197,6 +217,8 @@ def main():
     create_avg_weight_per_tx_plot(df)       # Yeni
     create_algorithm_efficiency_chart(df)   # Güncellendi
     create_block_size_scalability_analysis(df)
+    create_tps_over_blocks(df)              # Yeni: TPS çizgisi
+    create_avg_tps_bar(df)                  # Yeni: Ortalama TPS bar
     # create_comprehensive_dashboard(df) # Opsiyonel
 
     print("\n" + "=" * 60 + "\n✅ TÜM GRAFİKLER BAŞARIYLA OLUŞTURULDU!\n" + "=" * 60)
