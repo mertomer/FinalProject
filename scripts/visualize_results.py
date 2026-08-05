@@ -7,7 +7,6 @@ import os
 import sys
 
 # --- Ayarlar ---
-# Proje kök dizinini bul (visualize_results.py'nin bir üst dizini)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_DIR = os.path.join(_PROJECT_ROOT, "results")
 CSV_FILE = os.path.join(RESULTS_DIR, "simulasyon_sonuclari_detayli_tps.csv")
@@ -18,8 +17,9 @@ COLORS = {
     'Genetik Algoritma (YZ)': '#4169E1', # Kraliyet mavisi
     'Rastgele': '#DC143C',               # Kırmızı
     'Benzetilmiş Tavlama (YZ)': '#FF8C00', # Turuncu
-    'RL (PPO Model)': '#008080',         # Turkuaz
-    'RL PPO (Custom)': '#008080',        # Alternatif isim
+    'RL (PPO Model)': '#000000',         # Siyah
+    'RL PPO (Custom)': '#000000',        # Siyah
+    'PPO (RL) — Model': '#000000',       # Siyah
 }
 
 # --- Veri Yükleme ---
@@ -35,7 +35,7 @@ def load_and_prepare_data(csv_path=CSV_FILE):
     # Veri tiplerini düzelt
     numeric_cols = ['n_blocks', 'toplam_odul', 'kapasite_doluluk_yuzdesi',
                     'secilen_islem_sayisi', 'geride_kalan_islem_sayisi',
-                    'ortalama_odul_per_tx', 'ortalama_agirlik_per_tx']
+                    'ortalama_odul_per_tx', 'ortalama_agirlik_per_tx', 'tps']
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
@@ -70,7 +70,6 @@ def save_plot(filename, results_dir=RESULTS_DIR):
     except Exception as e:
         print(f"HATA: Grafik kaydedilemedi ({filename}): {e}")
 
-# Örnek Güncellenmiş Grafik Fonksiyonu:
 def create_block_rewards_comparison(df):
     plt.figure(figsize=(12, 7)) # Boyut ayarlandı
     for algo in df['algoritma'].unique():
@@ -84,9 +83,6 @@ def create_block_rewards_comparison(df):
     plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f} ETH'))
     save_plot('blok_odulleri_karsilastirma.png') # Kaydetme fonksiyonunu çağır
 
-# --- DİĞER TÜM create_... GRAFİK FONKSİYONLARINI BURAYA EKLEYİN ---
-# --- VE HER BİRİNİN SONUNDAKİ plt.savefig(...) SATIRINI ---
-# --- save_plot('dosya_adi.png') ŞEKLİNDE GÜNCELLEYİN ---
 
 def create_transaction_waiting_analysis(df):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -165,24 +161,54 @@ def create_block_size_scalability_analysis(df):
     plt.tight_layout()
     save_plot('blok_sayisi_olceklendirme.png')
 
+def create_tps_comparison_plot(df):
+    """Blok sayısına göre TPS değerlerini karşılaştıran grafik."""
+    plt.figure(figsize=(12, 7))
+    for algo in df['algoritma'].unique():
+        algo_data = df[df['algoritma'] == algo].sort_values('n_blocks')
+        plt.plot(algo_data['n_blocks'], algo_data['tps'], 
+                 marker='o', linewidth=2, markersize=5, 
+                 label=algo, color=COLORS.get(algo, '#000000'))
+    plt.xlabel('Blok Sayısı (N)')
+    plt.ylabel('TPS (Transactions Per Second)')
+    plt.title('TPS Karşılaştırması - Blok Sayısına Göre')
+    plt.legend()
+    plt.grid(True, alpha=0.4)
+    plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f} TPS'))
+    plt.tight_layout()
+    save_plot('tps_karsilastirma.png')
+
+def create_avg_tps_comparison(df):
+    """Ortalama TPS değerlerini karşılaştıran bar grafik."""
+    plt.figure(figsize=(12, 7))
+    avg_tps = df.groupby('algoritma')['tps'].mean().sort_values(ascending=False)
+    bars = plt.bar(avg_tps.index, avg_tps.values, 
+                   color=[COLORS.get(algo, '#000000') for algo in avg_tps.index])
+    plt.xlabel('Algoritma')
+    plt.ylabel('Ortalama TPS (Transactions Per Second)')
+    plt.title('Ortalama TPS Karşılaştırması')
+    plt.grid(True, alpha=0.4, axis='y')
+    plt.xticks(rotation=15)
+    plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.2f} TPS'))
+    
+    # Değerleri bar'ların üzerine yazdır
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.2f}',
+                ha='center', va='bottom', fontsize=9)
+    
+    plt.tight_layout()
+    save_plot('ortalama_tps_karsilastirma.png')
+
 # Kapsamlı Dashboard (İsteğe bağlı, 8 grafik olabilir)
 def create_comprehensive_dashboard(df):
     print("\n[Dashboard] Kapsamlı dashboard oluşturuluyor...")
     fig = plt.figure(figsize=(20, 25)) # Boyutu artır (4x2 grid için)
     gs = fig.add_gridspec(4, 2, hspace=0.4, wspace=0.25) # 4 satır
 
-    # Grafikleri ilgili subplot'lara yerleştir
-    # (Önceki dashboard kodunu buraya kopyalayıp, ax parametrelerini vererek
-    # ve yeni grafikler için yer açarak güncelleyin.)
-    # Örnek:
-    # ax1 = fig.add_subplot(gs[0, 0])
-    # ... (blok ödülleri kodu, sonunda ax=ax1 ekleyerek) ...
 
-    # Şimdilik basitçe fonksiyonları çağıralım (ayrı dosyalar daha iyi)
     print("Dashboard fonksiyonu henüz tam olarak güncellenmedi, ayrı grafikler oluşturuldu.")
-    # plt.suptitle('Kapsamlı Simülasyon Analizi Dashboard', fontsize=16, fontweight='bold')
-    # save_plot('kapsamli_simulasyon_dashboard.png')
-
 
 # --- ANA ÇALIŞTIRMA ---
 def main():
@@ -191,7 +217,6 @@ def main():
     if df is None: return
 
     print("\n🎨 Analiz grafikleri oluşturuluyor...")
-    # Fonksiyonları sırayla çağır
     create_block_rewards_comparison(df)
     create_transaction_waiting_analysis(df)
     create_capacity_utilization_chart(df)
@@ -199,6 +224,8 @@ def main():
     create_avg_weight_per_tx_plot(df)       # Yeni
     create_algorithm_efficiency_chart(df)   # Güncellendi
     create_block_size_scalability_analysis(df)
+    create_tps_comparison_plot(df)          # TPS grafikleri
+    create_avg_tps_comparison(df)           # Ortalama TPS grafiği
     # create_comprehensive_dashboard(df) # Opsiyonel
 
     print("\n" + "=" * 60 + "\n✅ TÜM GRAFİKLER BAŞARIYLA OLUŞTURULDU!\n" + "=" * 60)

@@ -3,7 +3,7 @@ import math
 import time
 import pandas as pd
 import numpy as np
-import cloudpickle  # VecNormalize istatistiklerini okumak için
+import cloudpickle  
 
 DEAP_AVAILABLE = True
 try:
@@ -30,14 +30,11 @@ except ImportError:
 
 # --- YARDIMCI FONKSİYONLAR ---
 def calculate_derived_metrics(total_value, total_weight, selected_tx_count, capacity, n_blocks):
-    """
-    Ortak metrikleri (TPS dahil) hesaplar.
-    """
+   
     avg_reward_per_tx = total_value / selected_tx_count if selected_tx_count > 0 else 0.0
     avg_weight_per_tx = total_weight / selected_tx_count if selected_tx_count > 0 else 0.0
     cap_util_percent = (total_weight / capacity) * 100 if capacity > 0 else 0.0
 
-    # TPS Hesaplaması (Ortalama blok süresi ~12 saniye)
     estimated_duration_seconds = n_blocks * 12
     tps = selected_tx_count / estimated_duration_seconds if estimated_duration_seconds > 0 else 0.0
 
@@ -347,27 +344,41 @@ def solve_simulated_annealing(transactions_df, capacity, n_blocks):
 K_TOP_ACTIONS = 10     # Eğitimde: 0=pas + 10 aksiyon
 PAS_ASSIST = True      # model 0 (pas) dese bile top-1 sığıyorsa al
 
+def _load_vecnorm_full(vecnorm_path):
+    """
+    VecNormalize .pkl dosyasından gözlem istatistiklerini (mean/var) ve clip_obs değerini okur.
+    Hem sözlük olarak kaydedilmiş istatistikleri hem de VecNormalize nesnesini destekler.
+    """
+    if not vecnorm_path:
+        return None, None, 10.0
+    try:
+        with open(vecnorm_path, "rb") as f:
+            data = cloudpickle.load(f)
+
+        rms = None
+        if isinstance(data, dict):
+            rms = data.get("ob_rms") or data.get("obs_rms")
+        else:
+            rms = getattr(data, "obs_rms", None) or getattr(data, "ob_rms", None)
+
+        clip_obs = float(getattr(data, "clip_obs", 10.0)) if not isinstance(data, dict) \
+            else float(data.get("clip_obs", 10.0))
+
+        if rms is not None and hasattr(rms, "mean") and hasattr(rms, "var"):
+            mean = np.array(rms.mean).astype(np.float32).flatten()
+            var  = np.array(rms.var ).astype(np.float32).flatten()
+            return mean, var, clip_obs
+    except Exception as e:
+        print(f"[RL] VecNormalize istatistikleri okunamadı: {e}")
+    return None, None, 10.0
+
+
 def _load_vecnorm_stats(vecnorm_path):
     """
     VecNormalize .pkl içindeki gözlem RMS istatistiklerini (mean/var) güvenli okuyucu.
     """
-    if not vecnorm_path:
-        return None, None
-    try:
-        with open(vecnorm_path, "rb") as f:
-            data = cloudpickle.load(f)
-        rms = None
-        if isinstance(data, dict) and "ob_rms" in data:
-            rms = data["ob_rms"]
-        elif isinstance(data, dict) and "obs_rms" in data:
-            rms = data["obs_rms"]
-        if rms is not None and hasattr(rms, "mean") and hasattr(rms, "var"):
-            mean = np.array(rms.mean).astype(np.float32).flatten()
-            var  = np.array(rms.var ).astype(np.float32).flatten()
-            return mean, var
-    except Exception as e:
-        print(f"[RL] VecNormalize istatistikleri okunamadı: {e}")
-    return None, None
+    mean, var, _ = _load_vecnorm_full(vecnorm_path)
+    return mean, var
 
 
 class RLPolicyRunner:
@@ -518,6 +529,184 @@ def solve_custom_rl(pool_df: pd.DataFrame, capacity: int, n_blocks: int,
 
     avg_reward, avg_weight, cap_util, tps = calculate_derived_metrics(
         total_value, total_weight, selected_count, total_capacity, n_blocks
+    )
+
+    return {
+        "algoritma": algoritma_adi,
+        "toplam_odul": float(total_value),
+        "kullanilan_kapasite": float(total_weight),
+        "secilen_islem_sayisi": int(selected_count),
+        "kapasite_doluluk_yuzdesi": float(cap_util),
+        "ortalama_odul_per_tx": float(avg_reward),
+        "ortalama_agirlik_per_tx": float(avg_weight),
+        "tps": float(tps),
+    }
+
+
+# ===== 6) MaskablePPO (ppo_model/) — Colab eğitim şemasıyla birebir inference =====
+# Eğitim ortamı (EthereumBlockEnv): action = Discrete(2500), obs = [gas_0, reward_0, ...,
+# gas_2499, reward_2499, remaining_gas] ve reward = (gas * gasPrice) / 1e15
+MASKABLE_MAX_TX = 2500
+MASKABLE_BLOCK_GAS = 30_000_000
+MASKABLE_REWARD_SCALE = 1e15
+
+_maskable_runner_cache = {}
+
+
+class MaskablePolicyRunner:
+    """
+    sb3_contrib MaskablePPO + VecNormalize ile eğitilmiş politikanın inference adaptörü.
+    Blok başına 2500 slotluk sabit gözlem vektörü üretir ve geçersiz aksiyonları maskeler.
+    """
+
+    def __init__(self, model_path: str, vecnorm_path: str | None = None,
+                 max_tx: int = MASKABLE_MAX_TX):
+        try:
+            from sb3_contrib import MaskablePPO
+        except ImportError as e:
+            raise RuntimeError(
+                "sb3-contrib bulunamadı. Kurulum: pip install sb3-contrib"
+            ) from e
+
+        self.max_tx = max_tx
+        self.obs_mean, self.obs_var, self.clip_obs = _load_vecnorm_full(vecnorm_path)
+
+        # Model SB3 2.7 ile kaydedildi; eski sürümlerde schedule nesneleri çözülemediği için
+        # custom_objects ile sabit değerler veriyoruz (inference'ta kullanılmıyorlar).
+        custom_objects = {
+            "lr_schedule": lambda _: 5e-5,
+            "clip_range": 0.2,
+            "clip_range_vf": None,
+        }
+        self.model = MaskablePPO.load(model_path, device="cpu", custom_objects=custom_objects)
+
+        obs_shape = self.model.observation_space.shape
+        expected = (self.max_tx * 2) + 1
+        if obs_shape != (expected,):
+            raise RuntimeError(
+                f"Model gözlem boyutu {obs_shape}, beklenen ({expected},). "
+                f"MASKABLE_MAX_TX değerini kontrol edin."
+            )
+        if self.obs_mean is not None and self.obs_mean.shape[0] != expected:
+            print("[MaskablePPO] VecNormalize istatistik boyutu uyuşmuyor, normalizasyon atlanıyor.")
+            self.obs_mean, self.obs_var = None, None
+
+    def make_obs(self, tx_gas: np.ndarray, tx_rewards: np.ndarray, remaining_gas: float) -> np.ndarray:
+        features = np.stack([tx_gas, tx_rewards], axis=1).flatten()
+        return np.concatenate([features, [remaining_gas]]).astype(np.float32)
+
+    def normalize(self, obs: np.ndarray) -> np.ndarray:
+        if self.obs_mean is None or self.obs_var is None:
+            return obs
+        normed = (obs - self.obs_mean) / np.sqrt(self.obs_var + 1e-8)
+        return np.clip(normed, -self.clip_obs, self.clip_obs).astype(np.float32)
+
+    def predict(self, obs: np.ndarray, action_mask: np.ndarray) -> int:
+        action, _ = self.model.predict(
+            obs.reshape(1, -1),
+            action_masks=action_mask.reshape(1, -1),
+            deterministic=True,
+        )
+        return int(np.asarray(action).flatten()[0])
+
+
+def _get_maskable_runner(model_path: str, vecnorm_path: str | None):
+    """Model dosyası ~83MB olduğu için pencere başına yeniden yüklemeyi engelleyen önbellek."""
+    key = (model_path, vecnorm_path)
+    if key not in _maskable_runner_cache:
+        _maskable_runner_cache[key] = MaskablePolicyRunner(model_path, vecnorm_path)
+    return _maskable_runner_cache[key]
+
+
+def solve_maskable_ppo(pool_df: pd.DataFrame, capacity: int, n_blocks: int,
+                       model_path: str, vecnorm_path: str | None = None,
+                       algoritma_adi: str = "PPO (RL) — Model"):
+    """
+    ppo_model/ dizinindeki MaskablePPO modelini havuz üzerinde çalıştırır.
+
+    Model tek bir blok (varsayılan 30M gas / en fazla 2500 işlem) için eğitildiği için,
+    N bloklu havuz blok blok işlenir: her blokta kalan havuzdan yoğunluğa göre en iyi
+    2500 aday slotlara yerleştirilir, model geçerli aksiyon maskesiyle işlem seçer ve
+    seçilenler havuzdan düşülür.
+    """
+    empty_result = {
+        "algoritma": algoritma_adi, "toplam_odul": 0.0, "kullanilan_kapasite": 0.0,
+        "secilen_islem_sayisi": 0, "kapasite_doluluk_yuzdesi": 0.0,
+        "ortalama_odul_per_tx": 0.0, "ortalama_agirlik_per_tx": 0.0,
+        "tps": 0.0
+    }
+    if pool_df.empty or capacity <= 0 or n_blocks <= 0:
+        return empty_result
+
+    try:
+        runner = _get_maskable_runner(model_path, vecnorm_path)
+    except Exception as e:
+        print(f"[MaskablePPO] Model yüklenemedi ({e}). Greedy'e düşülüyor.")
+        fb = solve_greedy(pool_df, capacity, n_blocks)
+        fb["algoritma"] = f"{algoritma_adi} (fallback=Greedy)"
+        return fb
+
+    max_tx = runner.max_tx
+    df = pool_df.copy()
+    if "density" not in df.columns:
+        df["density"] = df["value"] / (df["weight"] + 1e-9)
+
+    weights = df["weight"].to_numpy(dtype=np.float64)
+    values = df["value"].to_numpy(dtype=np.float64)
+    density = df["density"].to_numpy(dtype=np.float64)
+
+    # Blok başına gas limiti: havuz kapasitesini blok sayısına böleriz (~30M).
+    block_gas_limit = float(capacity) / n_blocks
+
+    available = np.ones(len(df), dtype=bool)
+    total_value, total_weight, selected_count = 0.0, 0.0, 0
+
+    for _ in range(n_blocks):
+        pool_idx = np.flatnonzero(available)
+        if pool_idx.size == 0:
+            break
+
+        # Slot sayısı sınırlı: yoğunluğu en yüksek adaylar bloğa aday olarak girer.
+        if pool_idx.size > max_tx:
+            top_local = np.argsort(density[pool_idx])[::-1][:max_tx]
+            pool_idx = pool_idx[top_local]
+
+        n_tx = pool_idx.size
+        tx_gas = np.zeros(max_tx, dtype=np.float32)
+        tx_rewards = np.zeros(max_tx, dtype=np.float32)
+        tx_gas[:n_tx] = weights[pool_idx]
+        tx_rewards[:n_tx] = values[pool_idx] / MASKABLE_REWARD_SCALE
+
+        remaining_gas = block_gas_limit
+        selected_slots = np.zeros(max_tx, dtype=bool)
+
+        while True:
+            mask = np.zeros(max_tx, dtype=bool)
+            mask[:n_tx] = True
+            mask &= ~selected_slots
+            mask &= tx_gas <= remaining_gas
+            mask &= tx_gas > 0
+            if not mask.any():
+                break
+
+            obs = runner.normalize(runner.make_obs(tx_gas, tx_rewards, remaining_gas))
+            action = runner.predict(obs, mask)
+
+            # Model geçersiz bir slot döndürürse (maske ihlali) bloğu sonlandır.
+            if action < 0 or action >= max_tx or not mask[action]:
+                break
+
+            selected_slots[action] = True
+            remaining_gas -= float(tx_gas[action])
+
+            global_idx = pool_idx[action]
+            available[global_idx] = False
+            total_weight += float(weights[global_idx])
+            total_value += float(values[global_idx])
+            selected_count += 1
+
+    avg_reward, avg_weight, cap_util, tps = calculate_derived_metrics(
+        total_value, total_weight, selected_count, capacity, n_blocks
     )
 
     return {

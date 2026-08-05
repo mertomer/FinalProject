@@ -19,12 +19,16 @@ try:
     from eth_analyzer.simulation.algorithms import (
         solve_random, solve_greedy,
         solve_genetic_algorithm, solve_simulated_annealing,
-        solve_custom_rl  # RL FONKSİYONU
+        solve_maskable_ppo  # RL FONKSİYONU (ppo_model/ altındaki MaskablePPO modeli)
     )
 except ImportError as e:
     print(f"HATA: Gerekli modüller import edilemedi: {e}")
     print("Proje yapısını ve __init__.py dosyalarını kontrol edin.")
     sys.exit(1)
+
+PPO_MODEL_DIR = os.path.join(project_root, "ppo_model")
+PPO_MODEL_PATH = os.path.join(PPO_MODEL_DIR, "ppo_blockchain_model_143238_steps.zip")
+PPO_VECNORM_PATH = os.path.join(PPO_MODEL_DIR, "vec_normalize_expert.pkl")
 
 
 def main_simulation():
@@ -39,6 +43,14 @@ def main_simulation():
     START_BLOCK = DEFAULT_START_BLOCK if 'DEFAULT_START_BLOCK' in globals() else 20866020
     MIN_WINDOW = SIMULATION_MIN_WINDOW if 'SIMULATION_MIN_WINDOW' in globals() else 5
     MAX_WINDOW = SIMULATION_MAX_WINDOW if 'SIMULATION_MAX_WINDOW' in globals() else 20
+
+    if not os.path.exists(PPO_MODEL_PATH):
+        print(f"UYARI: RL modeli bulunamadı: {PPO_MODEL_PATH}")
+        print("RL karşılaştırması Greedy'e düşecektir.")
+    else:
+        print(f"RL modeli: {os.path.relpath(PPO_MODEL_PATH, project_root)}")
+        if os.path.exists(PPO_VECNORM_PATH):
+            print(f"VecNormalize: {os.path.relpath(PPO_VECNORM_PATH, project_root)}")
 
     columns = [
         'n_blocks', 'algoritma', 'toplam_odul',
@@ -67,13 +79,13 @@ def main_simulation():
                 solve_genetic_algorithm(pool_df, total_capacity, n_blocks),
                 solve_simulated_annealing(pool_df, total_capacity, n_blocks),
 
-                # --- RL PPO Model Karşılaştırması ---
-                solve_custom_rl(
+                # --- RL PPO Model Karşılaştırması (ppo_model/) ---
+                solve_maskable_ppo(
                     pool_df,
                     total_capacity,
                     n_blocks,
-                    model_path="/Users/macbook/Desktop/Bitirme/FinalProject/ppo_mempool_v2.zip",
-                    vecnorm_path="/Users/macbook/Desktop/Bitirme/FinalProject/vecnormalize_v2.pkl",
+                    model_path=PPO_MODEL_PATH,
+                    vecnorm_path=PPO_VECNORM_PATH if os.path.exists(PPO_VECNORM_PATH) else None,
                 ),
             ]
 

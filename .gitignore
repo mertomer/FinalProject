@@ -1,6 +1,7 @@
 # Veritabanı ve Çıktılar
 data/
 results/
+old_models/
 
 # Python Cache ve Sanal Ortam
 __pycache__/

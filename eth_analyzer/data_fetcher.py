@@ -173,12 +173,9 @@ def fetch_and_store_range(start_block, end_block, db_path=DB_FILE_PATH):
         print(f"Hata Alınan / Atlanan Blok Sayısı: {error_count}")
         print(f"Veriler '{db_path}' dosyasına kaydedildi.")
 
-# Bu dosyanın `python -m eth_analyzer.data_fetcher` olarak çalıştırılması için
 if __name__ == "__main__":
     print("Ethereum Veri Çekme Aracı")
     print("-" * 26)
-    # İsteğe bağlı: Komut satırı argümanları eklenebilir (start, end, date vb.)
-    # Şimdilik varsayılan tarih için çalıştırıyoruz
     start_b, end_b = find_block_range_for_date()
     if start_b and end_b:
          fetch_and_store_range(start_b, end_b)

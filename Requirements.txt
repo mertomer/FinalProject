@@ -1,3 +1,7 @@
 requests
 pandas
 deap
+numpy
+cloudpickle
+stable-baselines3>=2.3.0
+sb3-contrib>=2.3.0
